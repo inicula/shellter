@@ -144,14 +144,14 @@ int quit(const args_t& args)
 
 } // namespace builtins
 
-using builtin_func_t = int (*)(const std::vector<std::string>&);
+using builtin_func_t = int (*)(const builtins::args_t&);
 
 static const std::unordered_map<std::string_view, builtin_func_t> builtin_funcs = {
-    { "cd",      builtins::cd      },
-    { "echo",    builtins::echo    },
-    { "exit",    builtins::exit    },
-    { "pwd",     builtins::pwd     },
-    { "history", builtins::history },
-    { "addenv",  builtins::addenv  },
-    { "quit",    builtins::quit    }
+    { "cd",      &builtins::cd      },
+    { "echo",    &builtins::echo    },
+    { "exit",    &builtins::exit    },
+    { "pwd",     &builtins::pwd     },
+    { "history", &builtins::history },
+    { "addenv",  &builtins::addenv  },
+    { "quit",    &builtins::quit    }
 };

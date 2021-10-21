@@ -5,7 +5,7 @@ DEBUGFLAGS = ${CPPSTD} -g -Og -march=native -fno-rtti
 RELEASEFLAGS = ${CPPSTD} -O3 -march=native -flto -fno-rtti -fno-exceptions
 
 #libs
-LIBS = -lfmt -lboost_regex
+LIBS = -lfmt -lboost_regex -lreadline
 
 #compiler
 CPPC = g++

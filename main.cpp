@@ -5,6 +5,9 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <stdio.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 #include <fmt/core.h>
 #include <fmt/color.h>
 #include <boost/algorithm/string.hpp>
@@ -36,10 +39,33 @@ class LogicSequence;
 class PipeSequence;
 
 /* function declarations */
+static void readline_free_history()
+{
+        HISTORY_STATE* myhist = history_get_history_state();
+        HIST_ENTRY** mylist = history_list();
+
+        for(int i = 0; i < myhist->length; i++)
+        {
+                free_history_entry(mylist[i]);
+        }
+
+        free(myhist);
+        free(mylist);
+}
+static std::string readline_to_string(const char* const ptr)
+{
+        char* buf = readline(ptr);
+
+        add_history(buf);
+        std::string res = buf;
+        free(buf);
+
+        return res;
+}
 static std::unique_ptr<Command> process_line(const std::string_view);
 static bool ends_in_special_seq(const std::string_view);
 static void update_current_user();
-static void prompt();
+static std::string get_prompt();
 static void loop();
 static void interrupt_child(const int);
 
@@ -380,27 +406,27 @@ void update_current_user()
         gethostname(current_host.data(), sizeof(current_host));
 }
 
-void prompt()
+std::string get_prompt()
 {
-        fmt::print(FMT_BOLD | fg(fmt::terminal_color::bright_black), "[");
-        fmt::print(FMT_BOLD | fg(fmt::terminal_color::yellow), "{}", current_user.data());
-        fmt::print(FMT_BOLD | fg(fmt::terminal_color::bright_black), "@");
-        fmt::print(FMT_BOLD | fg(fmt::terminal_color::blue), "{}", current_host.data());
-        fmt::print(FMT_BOLD | fg(fmt::terminal_color::bright_black), ":");
-        fmt::print(FMT_BOLD | fg(fmt::terminal_color::red), "{}", fs::current_path().c_str());
-        fmt::print(FMT_BOLD | fg(fmt::terminal_color::bright_black), "]");
-        fmt::print(FMT_BOLD | fg(fmt::terminal_color::bright_white), "% ");
+        std::string path_str = fs::current_path().c_str();
+        const std::string_view home_sv = home.c_str();
+
+        if(path_str.find(home_sv) == 0)
+        {
+                boost::replace_first(path_str, home_sv, "~");
+        }
+
+        return fmt::format("[{}@{}:{}]% ", current_user.data(), current_host.data(), path_str);
 }
 
 void loop()
 {
-        std::string line;
-        std::string aux;
         while(running)
         {
-                prompt();
+                const auto prompt = get_prompt();
+                const auto prompt_ptr = prompt.c_str();
 
-                std::getline(std::cin, line);
+                std::string line = readline_to_string(prompt_ptr);
                 boost::trim(line);
 
                 if(line.empty())
@@ -410,8 +436,7 @@ void loop()
 
                 while(ends_in_special_seq(line))
                 {
-                        fmt::print("> ");
-                        std::getline(std::cin, aux);
+                        const auto aux = readline_to_string("> ");
                         line += ' ' + aux;
 
                         boost::trim_right(line);
@@ -438,4 +463,5 @@ int main()
         home = std::string("/home/") + current_user.data();
 
         loop();
+        readline_free_history();
 }
