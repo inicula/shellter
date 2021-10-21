@@ -17,7 +17,6 @@ int cd(const args_t& args)
         }
         else
         {
-
                 if(args[1] == "..")
                 {
                         next_path = fs::current_path().parent_path();
@@ -147,7 +146,12 @@ int quit(const args_t& args)
 
 using builtin_func_t = int (*)(const std::vector<std::string>&);
 
-static const std::unordered_map<std::string, builtin_func_t> builtin_funcs = {
-    {"cd", builtins::cd},    {"echo", builtins::echo},       {"exit", builtins::exit},
-    {"pwd", builtins::pwd},  {"history", builtins::history}, {"addenv", builtins::addenv},
-    {"quit", builtins::quit}};
+static const std::unordered_map<std::string_view, builtin_func_t> builtin_funcs = {
+    { "cd",      builtins::cd      },
+    { "echo",    builtins::echo    },
+    { "exit",    builtins::exit    },
+    { "pwd",     builtins::pwd     },
+    { "history", builtins::history },
+    { "addenv",  builtins::addenv  },
+    { "quit",    builtins::quit    }
+};

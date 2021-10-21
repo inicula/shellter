@@ -12,34 +12,41 @@
 
 namespace fs = std::filesystem;
 
-#ifdef BOOST_NO_EXCEPTIONS
-namespace boost
-{
-void throw_exception(std::exception const&)
-{
-        exit(EXIT_FAILURE);
-}
-} // namespace boost
-#endif
-
+/* config and utils */
 #include "config.h"
 #include "util.h"
-
-
 
 /* global variables */
 static bool running = true;
 static std::array<char, 256> current_user = {};
 static std::array<char, 256> current_host = {};
+static fs::path home;
 static fs::path old_path;
 static bool old_path_set = false;
 static std::vector<std::string> line_history;
 static std::unordered_map<std::string, std::string> environment_vars;
 
+/* builtin commands */
 #include "builtins.h"
 
-struct Command
+/* class declarations */
+class Command;
+class BasicCommand;
+class LogicSequence;
+class PipeSequence;
+
+/* function declarations */
+static std::unique_ptr<Command> process_line(const std::string_view);
+static bool ends_in_special_seq(const std::string_view);
+static void update_current_user();
+static void prompt();
+static void loop();
+static void interrupt_child(const int);
+
+/* class definitions */
+class Command
 {
+public:
         virtual ~Command() = default;
 
         virtual void exec() const = 0;
@@ -65,6 +72,61 @@ private:
         std::string_view line_sv;
 };
 
+class LogicSequence : public Command
+{
+private:
+        using operator_t = signed char;
+
+        struct Node
+        {
+                Node(const std::string_view);
+
+                bool is_operator_node() const;
+
+                operator_t op;
+                std::unique_ptr<BasicCommand> command;
+                std::unique_ptr<Node> left;
+                std::unique_ptr<Node> right;
+        };
+
+public:
+        LogicSequence(const std::string_view line)
+            : root(new Node(line))
+        {
+        }
+
+        void exec() const override;
+        int exec_and_wait() const override;
+
+private:
+        int exec(const std::unique_ptr<Node>&) const;
+
+private:
+        std::unique_ptr<Node> root = nullptr;
+};
+
+class PipeSequence : public Command
+{
+public:
+        PipeSequence(const std::vector<std::string_view>& split_on_pipe)
+        {
+                for(auto subline : split_on_pipe)
+                {
+                        commands.push_back(process_line(subline));
+                }
+        }
+
+        void exec() const override
+        {
+        }
+
+        int exec_and_wait() const override;
+
+private:
+        std::vector<std::unique_ptr<Command>> commands;
+};
+
+/* member function definitions */
 template<bool WAIT>
 auto BasicCommand::helper_exec() const
 {
@@ -85,15 +147,17 @@ auto BasicCommand::helper_exec() const
                 }
         }
 
-        if(builtin_funcs.contains(args.front()))
+        /* check for builtin command */
+        const auto builtin_it = builtin_funcs.find(args.front());
+        if(builtin_it != builtin_funcs.cend())
         {
                 if constexpr(WAIT)
                 {
-                        return builtin_funcs.at(args.front())(args);
+                        return builtin_it->second(args);
                 }
                 else
                 {
-                        builtin_funcs.at(args.front())(args);
+                        builtin_it->second(args);
                         return;
                 }
         }
@@ -137,39 +201,6 @@ int BasicCommand::exec_and_wait() const
 {
         return helper_exec<true>();
 }
-
-class LogicSequence : public Command
-{
-private:
-        using operator_t = signed char;
-
-        struct Node
-        {
-                Node(const std::string_view line);
-
-                bool is_operator_node() const;
-
-                operator_t op;
-                std::unique_ptr<BasicCommand> command;
-                std::unique_ptr<Node> left;
-                std::unique_ptr<Node> right;
-        };
-
-public:
-        LogicSequence(const std::string_view line)
-            : root(new Node(line))
-        {
-        }
-
-        void exec() const override;
-        int exec_and_wait() const override;
-
-private:
-        int exec(const std::unique_ptr<Node>& node) const;
-
-private:
-        std::unique_ptr<Node> root = nullptr;
-};
 
 LogicSequence::Node::Node(const std::string_view line)
 {
@@ -258,31 +289,6 @@ int LogicSequence::exec(const std::unique_ptr<Node>& node) const
         }
 }
 
-class PipeSequence;
-
-std::unique_ptr<Command> process_line(const std::string_view);
-
-class PipeSequence : public Command
-{
-public:
-        PipeSequence(const std::vector<std::string_view>& split_on_pipe)
-        {
-                for(auto subline : split_on_pipe)
-                {
-                        commands.push_back(process_line(subline));
-                }
-        }
-
-        void exec() const override
-        {
-        }
-
-        int exec_and_wait() const override;
-
-private:
-        std::vector<std::unique_ptr<Command>> commands;
-};
-
 int PipeSequence::exec_and_wait() const
 {
         const int fd_old_in = dup(0);
@@ -328,28 +334,30 @@ int PipeSequence::exec_and_wait() const
         return EXIT_SUCCESS;
 }
 
+/* function definitions */
 std::unique_ptr<Command> process_line(const std::string_view line)
 {
+        /* split on pipe operator */
         std::vector<std::string_view> pipe_strs;
         boost::split_regex(pipe_strs, line, boost::regex("(?<![|])[|](?![|])"));
 
-        /* got a pipe command */
+        /* line is a pipe command */
         if(pipe_strs.size() > 1)
         {
                 return std::unique_ptr<Command>(new PipeSequence(pipe_strs));
         }
 
-        /* got a logical sequence */
+        /* line is a logical sequence */
         if(line.find("&&") != line.npos || line.find("||") != line.npos)
         {
                 return std::unique_ptr<Command>(new LogicSequence(line));
         }
 
-        /* got a basic command */
+        /* line is a basic command */
         return std::unique_ptr<Command>(new BasicCommand(line));
 }
 
-bool ends_in_special(const std::string_view line)
+bool ends_in_special_seq(const std::string_view line)
 {
         const std::size_t len = line.size();
 
@@ -396,16 +404,20 @@ void loop()
                 prompt();
 
                 std::getline(std::cin, line);
+                boost::trim(line);
+
                 if(line.empty())
                 {
                         continue;
                 }
 
-                while(ends_in_special(line))
+                while(ends_in_special_seq(line))
                 {
                         fmt::print("> ");
                         std::getline(std::cin, aux);
                         line += ' ' + aux;
+
+                        boost::trim_right(line);
                 }
 
                 const std::unique_ptr<Command> command = process_line(line);
@@ -426,6 +438,7 @@ int main()
         signal(2, &interrupt_child);
 
         update_current_user();
+        home = std::string("/home/") + current_user.data();
 
         loop();
 }
