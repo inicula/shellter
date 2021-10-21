@@ -1,3 +1,5 @@
+#define FMT_BOLD fmt::emphasis::bold
+
 #define STDERR_COLOR_GREY    fg(fmt::terminal_color::bright_black),
 #define STDERR_COLOR_BLUE    fg(fmt::terminal_color::bright_blue),
 #define STDERR_COLOR_YELLOW  fg(fmt::terminal_color::bright_yellow),

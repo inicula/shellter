@@ -382,17 +382,14 @@ void update_current_user()
 
 void prompt()
 {
-        fmt::print(fmt::emphasis::bold | fg(fmt::terminal_color::bright_black), "[");
-        fmt::print(fmt::emphasis::bold | fg(fmt::terminal_color::yellow), "{}",
-                   current_user.data());
-        fmt::print(fmt::emphasis::bold | fg(fmt::terminal_color::bright_black), "@");
-        fmt::print(fmt::emphasis::bold | fg(fmt::terminal_color::blue), "{}",
-                   current_host.data());
-        fmt::print(fmt::emphasis::bold | fg(fmt::terminal_color::bright_black), ":");
-        fmt::print(fmt::emphasis::bold | fg(fmt::terminal_color::red), "{}",
-                   fs::current_path().c_str());
-        fmt::print(fmt::emphasis::bold | fg(fmt::terminal_color::bright_black), "]");
-        fmt::print(fmt::emphasis::bold | fg(fmt::terminal_color::bright_white), "% ");
+        fmt::print(FMT_BOLD | fg(fmt::terminal_color::bright_black), "[");
+        fmt::print(FMT_BOLD | fg(fmt::terminal_color::yellow), "{}", current_user.data());
+        fmt::print(FMT_BOLD | fg(fmt::terminal_color::bright_black), "@");
+        fmt::print(FMT_BOLD | fg(fmt::terminal_color::blue), "{}", current_host.data());
+        fmt::print(FMT_BOLD | fg(fmt::terminal_color::bright_black), ":");
+        fmt::print(FMT_BOLD | fg(fmt::terminal_color::red), "{}", fs::current_path().c_str());
+        fmt::print(FMT_BOLD | fg(fmt::terminal_color::bright_black), "]");
+        fmt::print(FMT_BOLD | fg(fmt::terminal_color::bright_white), "% ");
 }
 
 void loop()
