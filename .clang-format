@@ -1,0 +1,40 @@
+﻿---
+AlignOperands: 'true'
+AllowAllConstructorInitializersOnNextLine: 'false'
+AlwaysBreakTemplateDeclarations: 'Yes'
+BreakBeforeBraces: Custom
+BreakConstructorInitializers: BeforeComma
+ConstructorInitializerAllOnOneLineOrOnePerLine: 'false'
+Language: Cpp
+PointerAlignment: Left
+SpaceBeforeCpp11BracedList: 'false'
+SpaceBeforeParens: Never
+Standard: Auto
+SortIncludes: 'false'
+AllowShortBlocksOnASingleLine: 'false'
+AllowShortCaseLabelsOnASingleLine: 'false'
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: None
+SpaceAfterTemplateKeyword: 'false'
+IndentCaseLabels: 'false'
+ColumnLimit: 95
+IndentWidth : '8'
+AccessModifierOffset: '-8'
+BraceWrapping:
+    AfterCaseLabel: 'true'
+    AfterClass: 'true'
+    AfterControlStatement: 'true'
+    AfterFunction: 'true'
+    AfterNamespace: 'true'
+    AfterObjCDeclaration: 'true'
+    AfterStruct: 'true'
+    AfterUnion: 'true'
+    AfterExternBlock: 'true'
+    BeforeCatch: 'true'
+    BeforeElse: 'true'
+    BeforeLambdaBody: 'true'
+    SplitEmptyFunction: 'true'
+    SplitEmptyRecord: 'true'
+    SplitEmptyNamespace: 'true'
+
