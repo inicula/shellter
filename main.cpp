@@ -307,7 +307,6 @@ int PipeSequence::exec_and_wait() const
         const std::size_t len = commands.size();
         for(std::size_t i = 0; i < len; ++i)
         {
-
                 dup2(fd_command_input, 0);
                 close(fd_command_input);
 
@@ -319,7 +318,6 @@ int PipeSequence::exec_and_wait() const
                 else
                 {
                         /* set up pipe */
-
                         int fd_pipe[2];
                         pipe(fd_pipe);
 
