@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <filesystem>
+#include <optional>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -41,7 +42,7 @@ class PipeSequence;
 /* function declarations */
 static std::pair<bool, boost::smatch> check_special_seq_err(const std::string&);
 static void readline_free_history();
-static std::string readline_to_string(const char* const);
+static std::optional<std::string> readline_to_string(const char* const);
 static std::unique_ptr<Command> process_line(const std::string_view);
 static bool ends_in_special_seq(const std::string_view);
 static void update_current_user();
@@ -345,9 +346,8 @@ std::pair<bool, boost::smatch> check_special_seq_err(const std::string& line)
 {
         boost::smatch match_array;
 
-        const bool found =
-            boost::regex_search(line.begin(), line.end(), match_array,
-                                boost::regex("[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*"));
+        const bool found = boost::regex_search(
+            line, match_array, boost::regex("[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*"));
 
         return {found, std::move(match_array)};
 }
@@ -366,9 +366,13 @@ void readline_free_history()
         free(mylist);
 }
 
-std::string readline_to_string(const char* const ptr)
+std::optional<std::string> readline_to_string(const char* const ptr)
 {
         char* buf = readline(ptr);
+        if(buf == nullptr)
+        {
+                return std::nullopt;
+        }
 
         add_history(buf);
         std::string res = buf;
@@ -442,7 +446,14 @@ void loop()
                 const auto prompt = get_prompt();
                 const auto prompt_ptr = prompt.c_str();
 
-                std::string line = readline_to_string(prompt_ptr);
+                std::optional<std::string> opt_line = readline_to_string(prompt_ptr);
+                if(!opt_line.has_value())
+                {
+                        return;
+                }
+
+                std::string& line = *opt_line;
+
                 boost::trim(line);
 
                 if(line.empty())
@@ -452,9 +463,15 @@ void loop()
 
                 while(ends_in_special_seq(line))
                 {
-                        const auto aux = readline_to_string("> ");
-                        line += ' ' + aux;
+                        const auto opt_aux = readline_to_string("> ");
+                        if(!opt_aux.has_value())
+                        {
+                                return;
+                        }
 
+                        const auto& aux = *opt_aux;
+
+                        line += ' ' + aux;
                         boost::trim_right(line);
                 }
 
@@ -464,7 +481,6 @@ void loop()
                         print_err_fmt("shellter: syntax error: unrecognized sequence of "
                                       "special characters characters: '{}'\n",
                                       sv_from_match(match_res.second[0]));
-                        fmt::print("line was: {}", line);
                         continue;
                 }
 
