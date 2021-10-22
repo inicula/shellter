@@ -39,29 +39,9 @@ class LogicSequence;
 class PipeSequence;
 
 /* function declarations */
-static void readline_free_history()
-{
-        HISTORY_STATE* myhist = history_get_history_state();
-        HIST_ENTRY** mylist = history_list();
-
-        for(int i = 0; i < myhist->length; i++)
-        {
-                free_history_entry(mylist[i]);
-        }
-
-        free(myhist);
-        free(mylist);
-}
-static std::string readline_to_string(const char* const ptr)
-{
-        char* buf = readline(ptr);
-
-        add_history(buf);
-        std::string res = buf;
-        free(buf);
-
-        return res;
-}
+static auto check_special_seq_err(const std::string&);
+static void readline_free_history();
+static std::string readline_to_string(const char* const);
 static std::unique_ptr<Command> process_line(const std::string_view);
 static bool ends_in_special_seq(const std::string_view);
 static void update_current_user();
@@ -305,7 +285,7 @@ int LogicSequence::exec(const std::unique_ptr<Node>& node) const
                 }
                 default:
                 {
-                        assert(false);
+                        __builtin_unreachable();
                 }
                 }
         }
@@ -361,6 +341,42 @@ int PipeSequence::exec_and_wait() const
 }
 
 /* function definitions */
+auto check_special_seq_err(const std::string& line)
+{
+        boost::smatch match_array;
+
+        const bool found =
+            boost::regex_search(line.begin(), line.end(), match_array,
+                                boost::regex("[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*"));
+
+        return std::make_pair(found, match_array);
+}
+
+void readline_free_history()
+{
+        HISTORY_STATE* myhist = history_get_history_state();
+        HIST_ENTRY** mylist = history_list();
+
+        for(int i = 0; i < myhist->length; i++)
+        {
+                free_history_entry(mylist[i]);
+        }
+
+        free(myhist);
+        free(mylist);
+}
+
+std::string readline_to_string(const char* const ptr)
+{
+        char* buf = readline(ptr);
+
+        add_history(buf);
+        std::string res = buf;
+        free(buf);
+
+        return res;
+}
+
 std::unique_ptr<Command> process_line(const std::string_view line)
 {
         /* split on pipe operator */
@@ -442,8 +458,17 @@ void loop()
                         boost::trim_right(line);
                 }
 
+                const auto match_res = check_special_seq_err(line);
+                if(match_res.first == true)
+                {
+                        print_err_fmt("shellter: syntax error: unrecognized sequence of "
+                                      "special characters characters: '{}'\n",
+                                      sv_from_match(match_res.second[0]));
+                        fmt::print("line was: {}", line);
+                        continue;
+                }
+
                 const std::unique_ptr<Command> command = process_line(line);
-                assert(command);
                 command->exec_and_wait();
 
                 update_current_user();
