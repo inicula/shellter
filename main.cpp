@@ -39,7 +39,7 @@ class LogicSequence;
 class PipeSequence;
 
 /* function declarations */
-static auto check_special_seq_err(const std::string&);
+static std::pair<bool, boost::smatch> check_special_seq_err(const std::string&);
 static void readline_free_history();
 static std::string readline_to_string(const char* const);
 static std::unique_ptr<Command> process_line(const std::string_view);
@@ -341,7 +341,7 @@ int PipeSequence::exec_and_wait() const
 }
 
 /* function definitions */
-auto check_special_seq_err(const std::string& line)
+std::pair<bool, boost::smatch> check_special_seq_err(const std::string& line)
 {
         boost::smatch match_array;
 
@@ -349,7 +349,7 @@ auto check_special_seq_err(const std::string& line)
             boost::regex_search(line.begin(), line.end(), match_array,
                                 boost::regex("[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*"));
 
-        return std::make_pair(found, match_array);
+        return {found, std::move(match_array)};
 }
 
 void readline_free_history()
