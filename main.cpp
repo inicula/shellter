@@ -39,11 +39,14 @@ class BasicCommand;
 class LogicSequence;
 class PipeSequence;
 
+/* template function declarations */
+template<bool>
+static std::unique_ptr<Command> process_line(const std::string_view);
+
 /* function declarations */
 static std::pair<bool, boost::smatch> check_special_seq_err(const std::string&);
 static void readline_free_history();
 static std::optional<std::string> readline_to_string(const char* const);
-static std::unique_ptr<Command> process_line(const std::string_view);
 static bool ends_in_special_seq(const std::string_view);
 static void update_current_user();
 static std::string get_prompt();
@@ -119,7 +122,7 @@ public:
         {
                 for(auto subline : split_on_pipe)
                 {
-                        commands.push_back(process_line(subline));
+                        commands.push_back(process_line<false>(subline));
                 }
         }
 
@@ -379,16 +382,20 @@ std::optional<std::string> readline_to_string(const char* const ptr)
         return res;
 }
 
+template<bool CAN_HAVE_PIPES>
 std::unique_ptr<Command> process_line(const std::string_view line)
 {
-        /* split on pipe operator */
-        std::vector<std::string_view> pipe_strs;
-        boost::split_regex(pipe_strs, line, boost::regex("(?<![|])[|](?![|])"));
-
-        /* line is a pipe command */
-        if(pipe_strs.size() > 1)
+        if constexpr(CAN_HAVE_PIPES)
         {
-                return std::make_unique<PipeSequence>(pipe_strs);
+                /* split on pipe operator */
+                std::vector<std::string_view> pipe_strs;
+                boost::split_regex(pipe_strs, line, boost::regex("(?<![|])[|](?![|])"));
+
+                /* line is a pipe command */
+                if(pipe_strs.size() > 1)
+                {
+                        return std::make_unique<PipeSequence>(pipe_strs);
+                }
         }
 
         /* line is a logical sequence */
@@ -477,12 +484,12 @@ void loop()
                 if(match_res.first == true)
                 {
                         print_err_fmt("shellter: syntax error: unrecognized sequence of "
-                                      "special characters characters: '{}'\n",
+                                      "special characters: '{}'\n",
                                       sv_from_match(match_res.second[0]));
                         continue;
                 }
 
-                const std::unique_ptr<Command> command = process_line(line);
+                const std::unique_ptr<Command> command = process_line<true>(line);
                 command->exec_and_wait();
 
                 update_current_user();
