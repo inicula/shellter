@@ -98,7 +98,7 @@ private:
 
 public:
         LogicSequence(const std::string_view line)
-            : root(new Node(line))
+            : root(std::make_unique<Node>(line))
         {
         }
 
@@ -219,27 +219,27 @@ LogicSequence::Node::Node(const std::string_view line)
                 const std::string_view left_line{line.cbegin(), line.cbegin() + or_pos};
                 const std::string_view right_line{line.cbegin() + or_pos + 2, line.cend()};
 
-                op = 1;
+                op      = 1;
                 command = nullptr;
-                left = std::unique_ptr<Node>(new Node(left_line));
-                right = std::unique_ptr<Node>(new Node(right_line));
+                left    = std::make_unique<Node>(left_line);
+                right   = std::make_unique<Node>(right_line);
         }
         else if(and_pos != line.npos)
         {
                 const std::string_view left_line{line.cbegin(), line.cbegin() + and_pos};
                 const std::string_view right_line{line.cbegin() + and_pos + 2, line.cend()};
 
-                op = 0;
+                op      = 0;
                 command = nullptr;
-                left = std::unique_ptr<Node>(new Node(left_line));
-                right = std::unique_ptr<Node>(new Node(right_line));
+                left    = std::make_unique<Node>(left_line);
+                right   = std::make_unique<Node>(right_line);
         }
         else
         {
-                command = std::unique_ptr<BasicCommand>(new BasicCommand(line));
-                op = -1;
-                left = nullptr;
-                right = nullptr;
+                op      = -1;
+                command = std::make_unique<BasicCommand>(line);
+                left    = nullptr;
+                right   = nullptr;
         }
 }
 
@@ -388,17 +388,17 @@ std::unique_ptr<Command> process_line(const std::string_view line)
         /* line is a pipe command */
         if(pipe_strs.size() > 1)
         {
-                return std::unique_ptr<Command>(new PipeSequence(pipe_strs));
+                return std::make_unique<PipeSequence>(pipe_strs);
         }
 
         /* line is a logical sequence */
         if(line.find("&&") != line.npos || line.find("||") != line.npos)
         {
-                return std::unique_ptr<Command>(new LogicSequence(line));
+                return std::make_unique<LogicSequence>(line);
         }
 
         /* line is a basic command */
-        return std::unique_ptr<Command>(new BasicCommand(line));
+        return std::make_unique<BasicCommand>(line);
 }
 
 bool ends_in_special_seq(const std::string_view line)
