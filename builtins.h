@@ -133,7 +133,7 @@ int quit(const args_t& args)
         const std::size_t len = args.size();
         if(len > 1)
         {
-                print_err_fmt("shellter: cd: too many arguments\n");
+                print_err_fmt("shellter: quit: too many arguments\n");
                 return EXIT_FAILURE;
         }
 
