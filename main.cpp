@@ -1,3 +1,7 @@
+/* TODO
+ * Get rid of inheritance, make BasicCommand, LogicSequence and PipeSequence
+ * behave as static functions because they don't need to have any state. */
+
 #include <iostream>
 #include <vector>
 #include <string>
@@ -34,14 +38,13 @@ static std::unordered_map<std::string, std::string> environment_vars;
 #include "builtins.h"
 
 /* class declarations */
-class Command;
 class BasicCommand;
 class LogicSequence;
 class PipeSequence;
 
 /* template function declarations */
 template<bool>
-static std::unique_ptr<Command> process_line(const std::string_view);
+static void process_line(const std::string_view);
 
 /* function declarations */
 static std::pair<bool, boost::smatch> check_special_seq_err(const std::string&);
@@ -54,16 +57,7 @@ static void loop();
 static void interrupt_child(const int);
 
 /* class definitions */
-class Command
-{
-public:
-        virtual ~Command() = default;
-
-        virtual void exec() const = 0;
-        virtual int exec_and_wait() const = 0;
-};
-
-class BasicCommand : public Command
+class BasicCommand
 {
 public:
         BasicCommand(const std::string_view line_sv)
@@ -71,8 +65,8 @@ public:
         {
         }
 
-        void exec() const override;
-        int exec_and_wait() const override;
+        void exec() const;
+        int exec_and_wait() const;
 
 private:
         template<bool>
@@ -82,58 +76,40 @@ private:
         std::string_view line_sv;
 };
 
-class LogicSequence : public Command
+class LogicSequence
 {
-private:
-        using operator_t = signed char;
-
-        struct Node
-        {
-                Node(const std::string_view);
-
-                bool is_operator_node() const;
-
-                operator_t op;
-                std::unique_ptr<BasicCommand> command;
-                std::unique_ptr<Node> left;
-                std::unique_ptr<Node> right;
-        };
-
 public:
         LogicSequence(const std::string_view line)
-            : root(std::make_unique<Node>(line))
+            : whole_line(line)
         {
         }
 
-        void exec() const override;
-        int exec_and_wait() const override;
+        void exec() const;
+        int exec_and_wait() const;
 
 private:
-        int exec(const std::unique_ptr<Node>&) const;
+        int exec(const std::string_view sub_line) const;
 
 private:
-        std::unique_ptr<Node> root = nullptr;
+        std::string_view whole_line;
 };
 
-class PipeSequence : public Command
+class PipeSequence
 {
 public:
-        PipeSequence(const std::vector<std::string_view>& split_on_pipe)
-        {
-                for(auto subline : split_on_pipe)
-                {
-                        commands.push_back(process_line<false>(subline));
-                }
-        }
-
-        void exec() const override
+        PipeSequence(std::vector<std::string_view>&& split_on_pipe)
+            : command_components(std::move(split_on_pipe))
         {
         }
 
-        int exec_and_wait() const override;
+        void exec() const
+        {
+        }
+
+        int exec_and_wait() const;
 
 private:
-        std::vector<std::unique_ptr<Command>> commands;
+        std::vector<std::string_view> command_components;
 };
 
 /* member function definitions */
@@ -212,90 +188,53 @@ int BasicCommand::exec_and_wait() const
         return helper_exec<true>();
 }
 
-LogicSequence::Node::Node(const std::string_view line)
-{
-        const auto or_pos = line.find("||");
-        const auto and_pos = line.find("&&");
-
-        if(or_pos != line.npos)
-        {
-                const std::string_view left_line{line.cbegin(), line.cbegin() + or_pos};
-                const std::string_view right_line{line.cbegin() + or_pos + 2, line.cend()};
-
-                op      = 1;
-                command = nullptr;
-                left    = std::make_unique<Node>(left_line);
-                right   = std::make_unique<Node>(right_line);
-        }
-        else if(and_pos != line.npos)
-        {
-                const std::string_view left_line{line.cbegin(), line.cbegin() + and_pos};
-                const std::string_view right_line{line.cbegin() + and_pos + 2, line.cend()};
-
-                op      = 0;
-                command = nullptr;
-                left    = std::make_unique<Node>(left_line);
-                right   = std::make_unique<Node>(right_line);
-        }
-        else
-        {
-                op      = -1;
-                command = std::make_unique<BasicCommand>(line);
-                left    = nullptr;
-                right   = nullptr;
-        }
-}
-
-bool LogicSequence::Node::is_operator_node() const
-{
-        return op >= 0;
-}
-
 void LogicSequence::exec() const
 {
-        exec(root);
+        exec(whole_line);
 }
 
 int LogicSequence::exec_and_wait() const
 {
-        return exec(root);
+        return exec(whole_line);
 }
 
-int LogicSequence::exec(const std::unique_ptr<Node>& node) const
+int LogicSequence::exec(const std::string_view sub_line) const
 {
-        if(node->is_operator_node())
+        const auto or_pos = sub_line.find("||");
+        const auto and_pos = sub_line.find("&&");
+
+        if(or_pos != sub_line.npos)
         {
-                switch(node->op)
-                {
-                case 0:
-                {
-                        const int ret = exec(node->left);
-                        if(ret == EXIT_SUCCESS)
-                        {
-                                return exec(node->right);
-                        }
+                const std::string_view left_line{sub_line.cbegin(), sub_line.cbegin() + or_pos};
+                const std::string_view right_line{sub_line.cbegin() + or_pos + 2, sub_line.cend()};
 
-                        return ret;
-                }
-                case 1:
+                const int left_ret = exec(left_line);
+                if(left_ret != EXIT_SUCCESS)
                 {
-                        const int ret = exec(node->left);
-                        if(ret != EXIT_SUCCESS)
-                        {
-                                return exec(node->right);
-                        }
+                        return exec(right_line);
+                }
 
-                        return ret;
-                }
-                default:
+                return left_ret;
+
+        }
+        else if(and_pos != sub_line.npos)
+        {
+                const std::string_view left_line{sub_line.cbegin(), sub_line.cbegin() + and_pos};
+                const std::string_view right_line{sub_line.cbegin() + and_pos + 2, sub_line.cend()};
+
+                const int left_ret = exec(left_line);
+                if(left_ret == EXIT_SUCCESS)
                 {
-                        __builtin_unreachable();
+                        return exec(right_line);
                 }
-                }
+
+                return left_ret;
+
         }
         else
         {
-                return node->command->exec_and_wait();
+                const BasicCommand bc(sub_line);
+                return bc.exec_and_wait();
         }
 }
 
@@ -307,7 +246,7 @@ int PipeSequence::exec_and_wait() const
         int fd_command_input = dup(fd_old_in);
         int fd_command_output;
 
-        const std::size_t len = commands.size();
+        const std::size_t len = command_components.size();
         for(std::size_t i = 0; i < len; ++i)
         {
                 dup2(fd_command_input, 0);
@@ -331,7 +270,7 @@ int PipeSequence::exec_and_wait() const
                 dup2(fd_command_output, 1);
                 close(fd_command_output);
 
-                commands[i]->exec_and_wait();
+                process_line<false>(command_components[i]);
         }
 
         dup2(fd_old_in, 0);
@@ -383,7 +322,7 @@ std::optional<std::string> readline_to_string(const char* const ptr)
 }
 
 template<bool CAN_HAVE_PIPES>
-std::unique_ptr<Command> process_line(const std::string_view line)
+void process_line(const std::string_view line)
 {
         if constexpr(CAN_HAVE_PIPES)
         {
@@ -394,18 +333,23 @@ std::unique_ptr<Command> process_line(const std::string_view line)
                 /* line is a pipe command */
                 if(pipe_strs.size() > 1)
                 {
-                        return std::make_unique<PipeSequence>(pipe_strs);
+                        const PipeSequence ps(std::move(pipe_strs));
+                        ps.exec_and_wait();
+                        return;
                 }
         }
 
         /* line is a logical sequence */
         if(line.find("&&") != line.npos || line.find("||") != line.npos)
         {
-                return std::make_unique<LogicSequence>(line);
+                const LogicSequence ls(line);
+                ls.exec_and_wait();
+                return;
         }
 
         /* line is a basic command */
-        return std::make_unique<BasicCommand>(line);
+        const BasicCommand bc(line);
+        bc.exec_and_wait();
 }
 
 bool ends_in_special_seq(const std::string_view line)
@@ -489,8 +433,7 @@ void loop()
                         continue;
                 }
 
-                const std::unique_ptr<Command> command = process_line<true>(line);
-                command->exec_and_wait();
+                process_line<true>(line);
 
                 update_current_user();
                 line_history.push_back(line);
