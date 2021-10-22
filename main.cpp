@@ -97,12 +97,17 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
         boost::split(args, str, boost::is_any_of(" "), boost::token_compress_on);
 
         /* replace environment values */
-        for(auto& word : args)
+        for(std::size_t i = 0; i < args.size(); ++i)
         {
-                const auto it = environment_vars.find(word);
+                if(i == 1 && args[0] == std::string_view("addenv"))
+                {
+                        continue;
+                }
+
+                const auto it = environment_vars.find(args[i]);
                 if(it != environment_vars.end())
                 {
-                        word = it->second;
+                        args[i] = it->second;
                 }
         }
 
