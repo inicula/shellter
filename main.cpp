@@ -1,3 +1,7 @@
+/* TODO
+ * fix behavior:
+ * each line in a multi-line command is stored separately in readline's history */
+
 #include <iostream>
 #include <vector>
 #include <string>
@@ -39,16 +43,21 @@ class BasicCommand;
 class LogicSequence;
 class PipeSequence;
 
+/* using declarations */
+using regsearch_result_t = std::pair<bool, boost::smatch>;
+
 /* template function declarations */
 template<bool>
 static void process_line(const std::string_view);
 
 /* function declarations */
-static std::pair<bool, boost::smatch> check_special_seq_err(const std::string&);
+static regsearch_result_t get_regserach_result(const std::string&, const char* const);
+static regsearch_result_t check_special_seq_err(const std::string&);
+static regsearch_result_t has_empty_seq_between_tokens(const std::string&);
 static void readline_free_history();
 static std::optional<std::string> readline_to_string(const char* const);
 static bool ends_in_special_seq(const std::string_view);
-static void update_current_user();
+static void set_user_and_host();
 static std::string get_prompt();
 static void loop();
 static void interrupt_child(const int);
@@ -269,14 +278,22 @@ int PipeSequence::process_and_wait(const std::vector<std::string_view>& command_
 }
 
 /* function definitions */
-std::pair<bool, boost::smatch> check_special_seq_err(const std::string& line)
+regsearch_result_t get_regserach_result(const std::string& line, const char* const reg_expr)
 {
         boost::smatch match_array;
-
-        const bool found = boost::regex_search(
-            line, match_array, boost::regex("[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*"));
-
+        const bool found = boost::regex_search( line, match_array, boost::regex(reg_expr));
         return {found, std::move(match_array)};
+}
+
+regsearch_result_t check_special_seq_err(const std::string& line)
+{
+        return get_regserach_result(line, "[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*|[|][|][&\\|]+");
+}
+
+regsearch_result_t has_empty_seq_between_tokens(const std::string& line)
+{
+        return get_regserach_result(
+            line, "((?<![|])[|](?![|])|&&|[|][|])\\s+((?<![|])[|](?![|])|&&|[|][|])");
 }
 
 void readline_free_history()
@@ -353,9 +370,9 @@ bool ends_in_special_seq(const std::string_view line)
         return false;
 }
 
-void update_current_user()
+void set_user_and_host()
 {
-        getlogin_r(current_user.data(), sizeof(current_user));
+        cuserid(current_user.data());
         gethostname(current_host.data(), sizeof(current_host));
 }
 
@@ -408,31 +425,48 @@ void loop()
                         boost::trim_right(line);
                 }
 
-                const auto match_res = check_special_seq_err(line);
-                if(match_res.first == true)
+                /* check for syntax errors */
+                if(const auto matches = check_special_seq_err(line);
+                   matches.first == true)
                 {
                         print_err_fmt("shellter: syntax error: unrecognized sequence of "
                                       "special characters: '{}'\n",
-                                      sv_from_match(match_res.second[0]));
+                                      sv_from_match(matches.second[0]));
+
+                        continue;
+                }
+                if(const auto matches = has_empty_seq_between_tokens(line);
+                   matches.first == true)
+                {
+                        print_err_fmt(
+                            "shellter: syntax error: empty command between tokens: '{}'\n",
+                            sv_from_match(matches.second[0]));
+
                         continue;
                 }
 
+                /* line is valid, process it */
                 process_line<true>(line);
 
-                update_current_user();
                 line_history.push_back(line);
         }
 }
 
 void interrupt_child(const int)
 {
+        /* putc() is not signal-safe */
+        write(1, "\n", 1);
+
+        rl_on_new_line();
+        rl_replace_line("", 0);
+        rl_redisplay();
 }
 
 int main()
 {
-        signal(2, &interrupt_child);
+        signal(SIGINT, &interrupt_child);
 
-        update_current_user();
+        set_user_and_host();
         home = std::string("/home/") + current_user.data();
 
         loop();
