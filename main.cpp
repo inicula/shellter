@@ -47,7 +47,7 @@ template<bool>
 static void process_line(const std::string_view);
 
 /* function declarations */
-static regsearch_result_t get_regserach_result(const std::string&, const char* const);
+static regsearch_result_t get_regsearch_result(const std::string&, const char* const);
 static regsearch_result_t check_special_seq_err(const std::string&);
 static regsearch_result_t has_empty_seq_between_tokens(const std::string&);
 static void readline_free_history();
@@ -208,7 +208,6 @@ int LogicSequence::helper_exec(const std::string_view sub_line)
                 }
 
                 return left_ret;
-
         }
         else if(and_pos != sub_line.npos)
         {
@@ -222,7 +221,6 @@ int LogicSequence::helper_exec(const std::string_view sub_line)
                 }
 
                 return left_ret;
-
         }
         else
         {
@@ -274,7 +272,7 @@ int PipeSequence::process_and_wait(const std::vector<std::string_view>& command_
 }
 
 /* function definitions */
-regsearch_result_t get_regserach_result(const std::string& line, const char* const reg_expr)
+regsearch_result_t get_regsearch_result(const std::string& line, const char* const reg_expr)
 {
         boost::smatch match_array;
         const bool found = boost::regex_search(line, match_array, boost::regex(reg_expr));
@@ -283,12 +281,12 @@ regsearch_result_t get_regserach_result(const std::string& line, const char* con
 
 regsearch_result_t check_special_seq_err(const std::string& line)
 {
-        return get_regserach_result(line, "[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*|[|][|][&\\|]+");
+        return get_regsearch_result(line, "[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*|[|][|][&\\|]+");
 }
 
 regsearch_result_t has_empty_seq_between_tokens(const std::string& line)
 {
-        return get_regserach_result(
+        return get_regsearch_result(
             line, "((?<![|])[|](?![|])|&&|[|][|])\\s+((?<![|])[|](?![|])|&&|[|][|])");
 }
 
