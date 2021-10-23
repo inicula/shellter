@@ -1,7 +1,3 @@
-/* TODO
- * fix behavior:
- * each line in a multi-line command is stored separately in readline's history */
-
 #include <iostream>
 #include <vector>
 #include <string>
@@ -281,7 +277,7 @@ int PipeSequence::process_and_wait(const std::vector<std::string_view>& command_
 regsearch_result_t get_regserach_result(const std::string& line, const char* const reg_expr)
 {
         boost::smatch match_array;
-        const bool found = boost::regex_search( line, match_array, boost::regex(reg_expr));
+        const bool found = boost::regex_search(line, match_array, boost::regex(reg_expr));
         return {found, std::move(match_array)};
 }
 
@@ -318,7 +314,6 @@ std::optional<std::string> readline_to_string(const char* const ptr)
                 return std::nullopt;
         }
 
-        add_history(buf);
         std::string res = buf;
         free(buf);
 
@@ -425,6 +420,10 @@ void loop()
                         boost::trim_right(line);
                 }
 
+                /* add line to history */
+                add_history(line.c_str());
+                line_history.push_back(line);
+
                 /* check for syntax errors */
                 if(const auto matches = check_special_seq_err(line);
                    matches.first == true)
@@ -447,8 +446,6 @@ void loop()
 
                 /* line is valid, process it */
                 process_line<true>(line);
-
-                line_history.push_back(line);
         }
 }
 
