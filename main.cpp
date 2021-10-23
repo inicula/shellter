@@ -457,6 +457,7 @@ void interrupt_child(const int)
         /* putc() is not signal-safe */
         write(1, "\n", 1);
 
+        /* neither are those, probably */
         rl_on_new_line();
         rl_replace_line("", 0);
         rl_redisplay();
