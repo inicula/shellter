@@ -188,6 +188,15 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
                                 ? open(filename, open_modes[symbol_pos], OUTFILE_PERMS)
                                 : open(filename, open_modes[symbol_pos]);
 
+                        if(new_fd < 0)
+                        {
+                                print_err_fmt("shellter: error opening {}: {}\n",
+                                                filename, strerror(errno));
+
+                                restore_standard_fds(old_fds);
+                                if constexpr(WAIT) { return EXIT_FAILURE; } else { return; }
+                        }
+
                         dup2(new_fd, symbol_fds[symbol_pos]);
                         close(new_fd);
 
@@ -196,17 +205,11 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
 
                 /* filename is missing, report error and return */
                 print_err_fmt(
-                    "shellter: error in redirection symbol '{}': filename is missing",
+                    "shellter: error in redirection symbol '{}': filename is missing\n",
                     symbol_found);
 
-                if constexpr(WAIT)
-                {
-                        return EXIT_FAILURE;
-                }
-                else
-                {
-                        return;
-                }
+                restore_standard_fds(old_fds);
+                if constexpr(WAIT) { return EXIT_FAILURE; } else { return; }
         }
 
         /* check for builtin command */
@@ -216,14 +219,7 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
                 const auto r = builtin_it->second(args_after_redir);
 
                 restore_standard_fds(old_fds);
-                if constexpr(WAIT)
-                {
-                        return r;
-                }
-                else
-                {
-                        return;
-                }
+                if constexpr(WAIT) { return r; } else { return; }
         }
 
         const pid_t child_pid = fork();
