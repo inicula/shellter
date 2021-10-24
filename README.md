@@ -7,4 +7,5 @@ minimal unix shell written in C++
 * builtin commands;
 * piping;
 * logical operators;
-* environment variables.
+* environment variables;
+* input/output redirection.
