@@ -1,3 +1,6 @@
+/* TODO
+ * check for more syntax errors (redirection operators) */
+
 #include <iostream>
 #include <vector>
 #include <string>
@@ -7,6 +10,9 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/fcntl.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <termios.h>
@@ -99,7 +105,7 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
 
         /* split words, compress spaces */
         std::vector<std::string> args;
-        boost::split(args, str, boost::is_any_of(" "), boost::token_compress_on);
+        boost::split(args, std::as_const(str), boost::is_any_of(" "), boost::token_compress_on);
 
         /* replace environment values */
         for(std::size_t i = 0; i < args.size(); ++i)
@@ -116,17 +122,106 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
                 }
         }
 
-        /* check for builtin command */
-        const auto builtin_it = builtin_funcs.find(args.front());
-        if(builtin_it != builtin_funcs.cend())
+
+        std::vector<std::string> args_after_redir;
+
+        /* check for output redirection */
+        const std::array<int, 3> old_fds = {dup(0), dup(1), dup(2)};
+        for(std::size_t i = 0; i < args.size(); ++i)
         {
+                static constexpr std::array<std::string_view, 7> redir_symbols = {
+                        "1>>", "2>>", ">>", "1>", "2>", ">", "<"
+                };
+                static constexpr std::array<int, 7> symbol_fds = { 1, 2, 1, 1, 2, 1, 0};
+                static constexpr int OUTFILE_PERMS = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+                static constexpr std::array<int, 7> open_modes = {
+                        O_WRONLY | O_CREAT | O_APPEND,
+                        O_WRONLY | O_CREAT | O_APPEND,
+                        O_WRONLY | O_CREAT | O_APPEND,
+                        O_WRONLY | O_CREAT,
+                        O_WRONLY | O_CREAT,
+                        O_WRONLY | O_CREAT,
+                        O_RDONLY
+                };
+
+                const std::string_view current_arg = args[i];
+
+                /* check if at least one symbol was found */
+                const auto it =
+                    std::find_if(redir_symbols.begin(), redir_symbols.end(),
+                                 [&](const auto& symbol)
+                                 {
+                                         return current_arg.find(symbol) != current_arg.npos;
+                                 });
+
+                /* none were found */
+                if(it == redir_symbols.end())
+                {
+                        args_after_redir.emplace_back(std::move(args[i]));
+                        continue;
+                }
+
+                /* at least one was found, process it */
+                const auto symbol_pos = static_cast<std::size_t>(it - redir_symbols.begin());
+                const auto symbol_found = redir_symbols[symbol_pos];
+
+                const char* filename = nullptr;
+
+                /* check for filename in current arg */
+                if(current_arg.size() > symbol_found.size())
+                {
+                        filename = current_arg.data() + symbol_found.size();
+                }
+
+                /* check for filename in next arg */
+                if(i < args.size() - 1)
+                {
+                        filename = args[i + 1].c_str();
+                        ++i;
+                }
+
+                /* check if filename was found; if so, redirect input / output */
+                if(filename != nullptr)
+                {
+                        const int new_fd =
+                            (symbol_pos < redir_symbols.size() - 1)
+                                ? open(filename, open_modes[symbol_pos], OUTFILE_PERMS)
+                                : open(filename, open_modes[symbol_pos]);
+
+                        dup2(new_fd, symbol_fds[symbol_pos]);
+                        close(new_fd);
+
+                        continue;
+                }
+
+                /* filename is missing, report error and return */
+                print_err_fmt(
+                    "shellter: error in redirection symbol '{}': filename is missing",
+                    symbol_found);
+
                 if constexpr(WAIT)
                 {
-                        return builtin_it->second(args);
+                        return EXIT_FAILURE;
                 }
                 else
                 {
-                        builtin_it->second(args);
+                        return;
+                }
+        }
+
+        /* check for builtin command */
+        const auto builtin_it = builtin_funcs.find(args_after_redir.front());
+        if(builtin_it != builtin_funcs.cend())
+        {
+                const auto r = builtin_it->second(args_after_redir);
+
+                restore_standard_fds(old_fds);
+                if constexpr(WAIT)
+                {
+                        return r;
+                }
+                else
+                {
                         return;
                 }
         }
@@ -136,7 +231,7 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
         {
                 /* construct array of char pointers (null terminated) */
                 std::vector<char*> arg_ptrs;
-                for(auto& str : args)
+                for(auto& str : args_after_redir)
                 {
                         arg_ptrs.push_back(str.data());
                 }
@@ -147,6 +242,8 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
                               strerror(errno));
                 exit(1);
         }
+
+        restore_standard_fds(old_fds);
 
         if constexpr(WAIT)
         {
@@ -304,9 +401,9 @@ void readline_free_history()
         free(mylist);
 }
 
-std::optional<std::string> readline_to_string(const char* const ptr)
+std::optional<std::string> readline_to_string(const char* const prompt)
 {
-        char* buf = readline(ptr);
+        char* buf = readline(prompt);
         if(buf == nullptr)
         {
                 return std::nullopt;
