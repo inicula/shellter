@@ -8,4 +8,4 @@ minimal unix shell written in C++
 * piping;
 * logical operators;
 * environment variables;
-* input/output redirection.
+* stdin/stdout/stderr redirection.

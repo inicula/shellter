@@ -1,6 +1,3 @@
-/* TODO
- * check for more syntax errors (redirection operators) */
-
 #include <iostream>
 #include <vector>
 #include <string>
@@ -134,25 +131,25 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
                 }
         }
 
-
         std::vector<std::string> args_after_redir;
 
-        /* check for output redirection */
+        /* check for redirection */
         const std::array<int, 3> old_fds = {dup(0), dup(1), dup(2)};
         for(std::size_t i = 0; i < args.size(); ++i)
         {
-                static constexpr std::array<std::string_view, 7> redir_symbols = {
-                        "1>>", "2>>", ">>", "1>", "2>", ">", "<"
+                static constexpr std::array<std::string_view, 8> redir_symbols = {
+                        "1>>", "2>>", ">>", "1>", "2>", ">", "0<", "<"
                 };
-                static constexpr std::array<int, 7> symbol_fds = { 1, 2, 1, 1, 2, 1, 0};
+                static constexpr std::array<int, 8> symbol_fds = { 1, 2, 1, 1, 2, 1, 0, 0};
                 static constexpr int OUTFILE_PERMS = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-                static constexpr std::array<int, 7> open_modes = {
+                static constexpr std::array<int, 8> open_modes = {
                         O_WRONLY | O_CREAT | O_APPEND,
                         O_WRONLY | O_CREAT | O_APPEND,
                         O_WRONLY | O_CREAT | O_APPEND,
                         O_WRONLY | O_CREAT,
                         O_WRONLY | O_CREAT,
                         O_WRONLY | O_CREAT,
+                        O_RDONLY,
                         O_RDONLY
                 };
 
@@ -163,7 +160,7 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
                     std::find_if(redir_symbols.begin(), redir_symbols.end(),
                                  [&](const auto& symbol)
                                  {
-                                         return current_arg.find(symbol) != current_arg.npos;
+                                         return current_arg.find(symbol) == 0;
                                  });
 
                 /* none were found */
@@ -192,11 +189,11 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
                         ++i;
                 }
 
-                /* check if filename was found; if so, redirect input / output */
+                /* check if filename was found; if so, redirect that stream */
                 if(filename != nullptr)
                 {
                         const int new_fd =
-                            (symbol_pos < redir_symbols.size() - 1)
+                            (symbol_pos < redir_symbols.size() - 2)
                                 ? open(filename, open_modes[symbol_pos], OUTFILE_PERMS)
                                 : open(filename, open_modes[symbol_pos]);
 
@@ -499,7 +496,7 @@ void loop()
         {{
              {
                  "shellter: syntax error: unrecognized sequence of special characters: '{}'\n",
-                 "[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*|[|][|][&\\|]+"
+                 "([^0\\s>]|[\\S]{2,})<|([^12\\s>]|[\\S]{2,})(?<!>)>{1,}|>{3,}|<{2,}|[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*|[|][|][&\\|]+"
              },
              {
                  "shellter: syntax error: empty command between tokens: '{}'\n",
