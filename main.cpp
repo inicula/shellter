@@ -41,6 +41,7 @@ static std::unordered_map<std::string, std::string> environment_vars;
 #include "builtins.h"
 
 /* class declarations */
+struct SyntaxErrorRegex;
 class BasicCommand;
 class LogicSequence;
 class PipeSequence;
@@ -53,9 +54,8 @@ template<bool>
 static void process_line(const std::string_view);
 
 /* function declarations */
-static regsearch_result_t get_regsearch_result(const std::string&, const char* const);
-static regsearch_result_t check_special_seq_err(const std::string&);
-static regsearch_result_t has_empty_seq_between_tokens(const std::string&);
+static regsearch_result_t get_regsearch_result(const std::string&, const boost::regex&);
+static bool check_syntax_errors(const std::string&, const std::array<SyntaxErrorRegex, 2>&);
 static void readline_free_history();
 static std::optional<std::string> readline_to_string(const char* const);
 static bool ends_in_special_seq(const std::string_view);
@@ -65,6 +65,18 @@ static void loop();
 static void interrupt_child(const int);
 
 /* class definitions */
+struct SyntaxErrorRegex
+{
+        SyntaxErrorRegex(const char* fmt_str, const char* reg_str)
+            : fmt_diag(fmt_str)
+            , reg(reg_str)
+        {
+        }
+
+        std::string_view fmt_diag;
+        boost::regex reg;
+};
+
 class BasicCommand
 {
 public:
@@ -174,7 +186,7 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
                 }
 
                 /* check for filename in next arg */
-                if(i < args.size() - 1)
+                if(filename == nullptr && (i < args.size() - 1))
                 {
                         filename = args[i + 1].c_str();
                         ++i;
@@ -365,22 +377,26 @@ int PipeSequence::process_and_wait(const std::vector<std::string_view>& command_
 }
 
 /* function definitions */
-regsearch_result_t get_regsearch_result(const std::string& line, const char* const reg_expr)
+regsearch_result_t get_regsearch_result(const std::string& line, const boost::regex& reg_expr)
 {
         boost::smatch match_array;
-        const bool found = boost::regex_search(line, match_array, boost::regex(reg_expr));
+        const bool found = boost::regex_search(line, match_array, reg_expr);
         return {found, std::move(match_array)};
 }
 
-regsearch_result_t check_special_seq_err(const std::string& line)
+bool check_syntax_errors(const std::string& line, const std::array<SyntaxErrorRegex, 2>& possible_syntax_errs)
 {
-        return get_regsearch_result(line, "[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*|[|][|][&\\|]+");
-}
+        for(auto& possible_err : possible_syntax_errs)
+        {
+                const auto match_res = get_regsearch_result(line, possible_err.reg);
+                if(match_res.first)
+                {
+                        print_err_fmt(possible_err.fmt_diag, sv_from_match(match_res.second[0]));
+                        return true;
+                }
+        }
 
-regsearch_result_t has_empty_seq_between_tokens(const std::string& line)
-{
-        return get_regsearch_result(
-            line, "((?<![|])[|](?![|])|&&|[|][|])\\s+((?<![|])[|](?![|])|&&|[|][|])");
+        return false;
 }
 
 void readline_free_history()
@@ -475,8 +491,22 @@ std::string get_prompt()
         return fmt::format("[{}@{}:{}]% ", current_user.data(), current_host.data(), path_str);
 }
 
+
 void loop()
 {
+        /* regular expressions for syntax errors */
+        const std::array<SyntaxErrorRegex, 2> possible_syntax_errs =
+        {{
+             {
+                 "shellter: syntax error: unrecognized sequence of special characters: '{}'\n",
+                 "[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*|[|][|][&\\|]+"
+             },
+             {
+                 "shellter: syntax error: empty command between tokens: '{}'\n",
+                 "((?<![|])[|](?![|])|&&|[|][|])\\s+((?<![|])[|](?![|])|&&|[|][|])"
+             }
+        }};
+
         while(running)
         {
                 const auto prompt = get_prompt();
@@ -516,22 +546,8 @@ void loop()
                 line_history.push_back(line);
 
                 /* check for syntax errors */
-                if(const auto matches = check_special_seq_err(line);
-                   matches.first == true)
+                if(check_syntax_errors(line, possible_syntax_errs))
                 {
-                        print_err_fmt("shellter: syntax error: unrecognized sequence of "
-                                      "special characters: '{}'\n",
-                                      sv_from_match(matches.second[0]));
-
-                        continue;
-                }
-                if(const auto matches = has_empty_seq_between_tokens(line);
-                   matches.first == true)
-                {
-                        print_err_fmt(
-                            "shellter: syntax error: empty command between tokens: '{}'\n",
-                            sv_from_match(matches.second[0]));
-
                         continue;
                 }
 
