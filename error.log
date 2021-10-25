@@ -1,5 +1,0 @@
-.DEFAULT_GOAL := debug
-include config.mk
-debug:
-	${CPPC} ${WFLAGS} ${DEBUGFLAGS} ${SRC} -o shellter ${LIBS}
-.PHONY: clean shellter debug
