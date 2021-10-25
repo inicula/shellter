@@ -77,37 +77,23 @@ struct SyntaxErrorRegex
 class BasicCommand
 {
 public:
-        static void process(const std::string_view);
-        static int process_and_wait(const std::string_view);
-
-private:
-        template<bool>
-        static auto helper_exec(const std::string_view);
+        static int process(const std::string_view);
 };
 
 class LogicSequence
 {
 public:
-        static void process(const std::string_view);
-        static int process_and_wait(const std::string_view);
-
-private:
-        static int helper_exec(const std::string_view);
+        static int process(const std::string_view);
 };
 
 class PipeSequence
 {
 public:
-        static void process(const std::vector<std::string_view>&)
-        {
-        }
-
-        static int process_and_wait(const std::vector<std::string_view>&);
+        static int process(const std::vector<std::string_view>&);
 };
 
 /* static member function definitions */
-template<bool WAIT>
-auto BasicCommand::helper_exec(const std::string_view line_sv)
+int BasicCommand::process(const std::string_view line_sv)
 {
         std::string str(line_sv);
         boost::trim(str);
@@ -203,7 +189,7 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
                                                 filename, strerror(errno));
 
                                 restore_standard_fds(old_fds);
-                                if constexpr(WAIT) { return EXIT_FAILURE; } else { return; }
+                                return EXIT_FAILURE;
                         }
 
                         dup2(new_fd, symbol_fds[symbol_pos]);
@@ -218,7 +204,7 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
                     symbol_found);
 
                 restore_standard_fds(old_fds);
-                if constexpr(WAIT) { return EXIT_FAILURE; } else { return; }
+                return EXIT_FAILURE;
         }
 
         /* check for builtin command */
@@ -228,7 +214,7 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
                 const auto r = builtin_it->second(args_after_redir);
 
                 restore_standard_fds(old_fds);
-                if constexpr(WAIT) { return r; } else { return; }
+                return r;
         }
 
         const pid_t child_pid = fork();
@@ -250,50 +236,27 @@ auto BasicCommand::helper_exec(const std::string_view line_sv)
 
         restore_standard_fds(old_fds);
 
-        if constexpr(WAIT)
+        int status;
+        do
         {
-                int status;
-                do
-                {
-                        waitpid(child_pid, &status, WUNTRACED);
-                } while(!WIFEXITED(status) && !WIFSIGNALED(status));
+                waitpid(child_pid, &status, WUNTRACED);
+        } while(!WIFEXITED(status) && !WIFSIGNALED(status));
 
-                /* restore stdin if previous command made it invisible
-                 * and didn't restore it before returning / being closed */
-                struct termios term_status;
-                tcgetattr(0, &term_status);
+        /* restore stdin if previous command made it invisible
+         * and didn't restore it before returning / being closed */
+        struct termios term_status;
+        tcgetattr(0, &term_status);
 
-                if(!(term_status.c_lflag & ECHO))
-                {
-                        term_status.c_lflag |= ECHO;
-                        tcsetattr(0, TCSANOW, &term_status);
-                }
-
-                return status;
+        if(!(term_status.c_lflag & ECHO))
+        {
+                term_status.c_lflag |= ECHO;
+                tcsetattr(0, TCSANOW, &term_status);
         }
+
+        return status;
 }
 
-void BasicCommand::process(const std::string_view line_sv)
-{
-        helper_exec<false>(line_sv);
-}
-
-int BasicCommand::process_and_wait(const std::string_view line_sv)
-{
-        return helper_exec<true>(line_sv);
-}
-
-void LogicSequence::process(const std::string_view whole_line)
-{
-        helper_exec(whole_line);
-}
-
-int LogicSequence::process_and_wait(const std::string_view whole_line)
-{
-        return helper_exec(whole_line);
-}
-
-int LogicSequence::helper_exec(const std::string_view sub_line)
+int LogicSequence::process(const std::string_view sub_line)
 {
         const auto or_pos = sub_line.find("||");
         const auto and_pos = sub_line.find("&&");
@@ -303,10 +266,10 @@ int LogicSequence::helper_exec(const std::string_view sub_line)
                 const std::string_view left_line{sub_line.cbegin(), sub_line.cbegin() + or_pos};
                 const std::string_view right_line{sub_line.cbegin() + or_pos + 2, sub_line.cend()};
 
-                const int left_ret = helper_exec(left_line);
+                const int left_ret = process(left_line);
                 if(left_ret != EXIT_SUCCESS)
                 {
-                        return helper_exec(right_line);
+                        return process(right_line);
                 }
 
                 return left_ret;
@@ -316,21 +279,21 @@ int LogicSequence::helper_exec(const std::string_view sub_line)
                 const std::string_view left_line{sub_line.cbegin(), sub_line.cbegin() + and_pos};
                 const std::string_view right_line{sub_line.cbegin() + and_pos + 2, sub_line.cend()};
 
-                const int left_ret = helper_exec(left_line);
+                const int left_ret = process(left_line);
                 if(left_ret == EXIT_SUCCESS)
                 {
-                        return helper_exec(right_line);
+                        return process(right_line);
                 }
 
                 return left_ret;
         }
         else
         {
-                return BasicCommand::process_and_wait(sub_line);
+                return BasicCommand::process(sub_line);
         }
 }
 
-int PipeSequence::process_and_wait(const std::vector<std::string_view>& command_components)
+int PipeSequence::process(const std::vector<std::string_view>& command_components)
 {
         const int fd_old_in = dup(0);
         const int fd_old_out = dup(1);
@@ -436,7 +399,7 @@ void process_line(const std::string_view line)
                 /* line is a pipe command */
                 if(pipe_strs.size() > 1)
                 {
-                        PipeSequence::process_and_wait(pipe_strs);
+                        PipeSequence::process(pipe_strs);
                         return;
                 }
         }
@@ -444,12 +407,12 @@ void process_line(const std::string_view line)
         /* line is a logical sequence */
         if(line.find("&&") != line.npos || line.find("||") != line.npos)
         {
-                LogicSequence::process_and_wait(line);
+                LogicSequence::process(line);
                 return;
         }
 
         /* line is a basic command */
-        BasicCommand::process_and_wait(line);
+        BasicCommand::process(line);
 }
 
 bool ends_in_special_seq(const std::string_view line)
