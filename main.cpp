@@ -48,7 +48,7 @@ using regsearch_result_t = std::pair<bool, boost::smatch>;
 
 /* template function declarations */
 template<bool>
-static void process_line(const std::string_view);
+static int process_line(const std::string_view);
 
 /* function declarations */
 static regsearch_result_t get_regsearch_result(const std::string&, const boost::regex&);
@@ -289,7 +289,7 @@ int LogicSequence::process(const std::string_view sub_line)
         }
         else
         {
-                return BasicCommand::process(sub_line);
+                return process_line<false>(sub_line);
         }
 }
 
@@ -302,6 +302,7 @@ int PipeSequence::process(const std::vector<std::string_view>& command_component
         int fd_command_output;
 
         const std::size_t len = command_components.size();
+        int ret = EXIT_FAILURE;
         for(std::size_t i = 0; i < len; ++i)
         {
                 dup2(fd_command_input, 0);
@@ -325,7 +326,7 @@ int PipeSequence::process(const std::vector<std::string_view>& command_component
                 dup2(fd_command_output, 1);
                 close(fd_command_output);
 
-                process_line<false>(command_components[i]);
+                ret = BasicCommand::process(command_components[i]);
         }
 
         dup2(fd_old_in, 0);
@@ -333,7 +334,7 @@ int PipeSequence::process(const std::vector<std::string_view>& command_component
         close(fd_old_in);
         close(fd_old_out);
 
-        return EXIT_SUCCESS;
+        return ret;
 }
 
 /* function definitions */
@@ -387,32 +388,31 @@ std::optional<std::string> readline_to_string(const char* const prompt)
         return res;
 }
 
-template<bool CAN_HAVE_PIPES>
-void process_line(const std::string_view line)
+template<bool CAN_HAVE_LOGICAL_OPERATORS>
+int process_line(const std::string_view line)
 {
-        if constexpr(CAN_HAVE_PIPES)
+        if constexpr(CAN_HAVE_LOGICAL_OPERATORS)
         {
-                /* split on pipe operator */
-                std::vector<std::string_view> pipe_strs;
-                boost::split_regex(pipe_strs, line, boost::regex("(?<![|])[|](?![|])"));
-
-                /* line is a pipe command */
-                if(pipe_strs.size() > 1)
+                /* line is a logical sequence */
+                if(line.find("||") != line.npos || line.find("&&") != line.npos)
                 {
-                        PipeSequence::process(pipe_strs);
-                        return;
+                        return LogicSequence::process(line);
                 }
         }
 
-        /* line is a logical sequence */
-        if(line.find("&&") != line.npos || line.find("||") != line.npos)
+        /* split on pipe operator */
+        std::vector<std::string_view> pipe_strs;
+        boost::split_regex(pipe_strs, line, boost::regex("(?<![|])[|](?![|])"));
+
+        /* line is a pipe command */
+        if(pipe_strs.size() > 1)
         {
-                LogicSequence::process(line);
-                return;
+                return PipeSequence::process(pipe_strs);
         }
 
+
         /* line is a basic command */
-        BasicCommand::process(line);
+        return BasicCommand::process(line);
 }
 
 bool ends_in_special_seq(const std::string_view line)
