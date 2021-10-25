@@ -52,7 +52,7 @@ static void process_line(const std::string_view);
 
 /* function declarations */
 static regsearch_result_t get_regsearch_result(const std::string&, const boost::regex&);
-static bool check_syntax_errors(const std::string&, const std::array<SyntaxErrorRegex, 2>&);
+static bool check_syntax_errors(const std::string&, const std::array<SyntaxErrorRegex, 3>&);
 static void readline_free_history();
 static std::optional<std::string> readline_to_string(const char* const);
 static bool ends_in_special_seq(const std::string_view);
@@ -381,7 +381,7 @@ regsearch_result_t get_regsearch_result(const std::string& line, const boost::re
         return {found, std::move(match_array)};
 }
 
-bool check_syntax_errors(const std::string& line, const std::array<SyntaxErrorRegex, 2>& possible_syntax_errs)
+bool check_syntax_errors(const std::string& line, const std::array<SyntaxErrorRegex, 3>& possible_syntax_errs)
 {
         for(auto& possible_err : possible_syntax_errs)
         {
@@ -492,15 +492,19 @@ std::string get_prompt()
 void loop()
 {
         /* regular expressions for syntax errors */
-        const std::array<SyntaxErrorRegex, 2> possible_syntax_errs =
+        const std::array<SyntaxErrorRegex, 3> possible_syntax_errs =
         {{
              {
                  "shellter: syntax error: unrecognized sequence of special characters: '{}'\n",
-                 "><|[><]\\s+[><]|([^0\\s>]|[\\S]{2,})<|([^12\\s>]|[\\S]{2,})(?<!>)>{1,}|>{3,}|<{2,}|[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*|[|][|][&\\|]+"
+                 ">{3,}|<{2,}|[|]{3,}|[&]{3,}|(&[|]|[|]&)[&\\|]*|[|][|][&\\|]+"
              },
              {
                  "shellter: syntax error: empty command between tokens: '{}'\n",
                  "((?<![|])[|](?![|])|&&|[|][|])\\s+((?<![|])[|](?![|])|&&|[|][|])"
+             },
+             {
+                 "shellter: syntax error: bad file descriptor (only standard fds accepted): '{}'\n",
+                 "><|[><]\\s+[><]|([^0\\s>]|[\\S]{2,})<|([^12\\s>]|[\\S]{2,})(?<!>)>{1,}"
              }
         }};
 
