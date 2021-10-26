@@ -1,6 +1,12 @@
 ## shellter
 Minimal Unix shell written in C++.
 
+#### Dependencies:
++ libboost-regex-dev;
++ libfmt-dev;
++ libreadline-dev;
++ c++20-compatible compiler (at least `gcc version 10.1` or `clang version 11.0.0`).
+
 ### Building:
 
 Clone the repo, go in its root directory and run the makefile:
