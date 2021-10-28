@@ -410,7 +410,6 @@ int process_line(const std::string_view line)
                 return PipeSequence::process(pipe_strs);
         }
 
-
         /* line is a basic command */
         return BasicCommand::process(line);
 }
@@ -450,7 +449,6 @@ std::string get_prompt()
 
         return fmt::format("[{}@{}:{}]% ", current_user.data(), current_host.data(), path_str);
 }
-
 
 void loop()
 {
