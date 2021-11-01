@@ -50,9 +50,10 @@ using regsearch_result_t = std::pair<bool, boost::smatch>;
 template<bool>
 static int process_line(const std::string_view);
 
+static bool check_syntax_errors(const std::string&, const auto&);
+
 /* function declarations */
 static regsearch_result_t get_regsearch_result(const std::string&, const boost::regex&);
-static bool check_syntax_errors(const std::string&, const std::array<SyntaxErrorRegex, 3>&);
 static void readline_free_history();
 static std::optional<std::string> readline_to_string(const char* const);
 static bool ends_in_special_seq(const std::string_view);
@@ -124,30 +125,29 @@ int BasicCommand::process(const std::string_view line_sv)
         for(std::size_t i = 0; i < args.size(); ++i)
         {
                 static constexpr std::array<std::string_view, 8> redir_symbols = {
-                        "1>>", "2>>", ">>", "1>", "2>", ">", "0<", "<"
+                    "1>>", "2>>", ">>", "1>", "2>", ">", "0<", "<"
                 };
-                static constexpr std::array<int, 8> symbol_fds = { 1, 2, 1, 1, 2, 1, 0, 0};
+                static constexpr std::array<int, 8> symbol_fds = {1, 2, 1, 1, 2, 1, 0, 0};
                 static constexpr int OUTFILE_PERMS = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
                 static constexpr std::array<int, 8> open_modes = {
-                        O_WRONLY | O_CREAT | O_APPEND,
-                        O_WRONLY | O_CREAT | O_APPEND,
-                        O_WRONLY | O_CREAT | O_APPEND,
-                        O_WRONLY | O_CREAT,
-                        O_WRONLY | O_CREAT,
-                        O_WRONLY | O_CREAT,
-                        O_RDONLY,
-                        O_RDONLY
+                    O_WRONLY | O_CREAT | O_APPEND,
+                    O_WRONLY | O_CREAT | O_APPEND,
+                    O_WRONLY | O_CREAT | O_APPEND,
+                    O_WRONLY | O_CREAT,
+                    O_WRONLY | O_CREAT,
+                    O_WRONLY | O_CREAT,
+                    O_RDONLY,
+                    O_RDONLY
                 };
 
                 const std::string_view current_arg = args[i];
 
                 /* check if at least one symbol was found */
-                const auto it =
-                    std::find_if(redir_symbols.begin(), redir_symbols.end(),
-                                 [&](const auto& symbol)
-                                 {
-                                         return current_arg.find(symbol) == 0;
-                                 });
+                const auto it = std::find_if(redir_symbols.begin(), redir_symbols.end(),
+                                             [&](const auto& symbol)
+                                             {
+                                                     return current_arg.find(symbol) == 0;
+                                             });
 
                 /* none were found */
                 if(it == redir_symbols.end())
@@ -185,8 +185,8 @@ int BasicCommand::process(const std::string_view line_sv)
 
                         if(new_fd < 0)
                         {
-                                print_err_fmt("shellter: error opening {}: {}\n",
-                                                filename, strerror(errno));
+                                print_err_fmt("shellter: error opening {}: {}\n", filename,
+                                              strerror(errno));
 
                                 restore_standard_fds(old_fds);
                                 return EXIT_FAILURE;
@@ -345,7 +345,7 @@ regsearch_result_t get_regsearch_result(const std::string& line, const boost::re
         return {found, std::move(match_array)};
 }
 
-bool check_syntax_errors(const std::string& line, const std::array<SyntaxErrorRegex, 3>& possible_syntax_errs)
+bool check_syntax_errors(const std::string& line, const auto& possible_syntax_errs)
 {
         for(auto& possible_err : possible_syntax_errs)
         {
