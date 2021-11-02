@@ -54,7 +54,7 @@ helloword.c
 * stdin/stdout/stderr redirection:
 
 ```sh
-[user@host:~]% find / -type f 2>no-perms.txt 1>/dev/null || head -n3 no-perms.txt
+[user@host:~]% find / -type f 2>no-perms.txt 1>/dev/null || head -n3 < no-perms.txt
 find: ‘/.cache’: Permission denied
 find: ‘/boot/efi’: Permission denied
 find: ‘/run/exim4’: Permission denied
