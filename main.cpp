@@ -503,18 +503,32 @@ void loop()
                         boost::trim_right(line);
                 }
 
+
                 /* add line to history */
                 add_history(line.c_str());
                 line_history.push_back(line);
 
-                /* check for syntax errors */
-                if(check_syntax_errors(line, possible_syntax_errs))
-                {
-                        continue;
-                }
+                std::vector<std::string> separate_commands;
+                boost::split(separate_commands, std::as_const(line), boost::is_any_of(";"));
 
-                /* line is valid, process it */
-                process_line<true>(line);
+                for(auto& sep_line : separate_commands)
+                {
+                        boost::trim(sep_line);
+
+                        if(sep_line.empty())
+                        {
+                                continue;
+                        }
+
+                        /* check for syntax errors */
+                        if(check_syntax_errors(sep_line, possible_syntax_errs))
+                        {
+                                continue;
+                        }
+
+                        /* line is valid, process it */
+                        process_line<true>(sep_line);
+                }
         }
 }
 
