@@ -1,21 +1,14 @@
 template<typename... T>
 void print_err_fmt(T&&... args)
 {
-        std::array<char, 256> buf = {};
-        const auto res = readlink("/proc/self/fd/2", buf.data(), std::size(buf));
-        if(res >= 0)
+        if(isatty(2))
         {
-                buf.back() = '\0';
-
-                const std::string_view sv = buf.data();
-                if(sv.find("/dev/pts/") == 0)
-                {
-                        fmt::print(stderr, STDERR_COLOR std::forward<T>(args)...);
-                        return;
-                }
+                fmt::print(stderr, STDERR_COLOR std::forward<T>(args)...);
         }
-
-        fmt::print(stderr, std::forward<T>(args)...);
+        else
+        {
+                fmt::print(stderr, std::forward<T>(args)...);
+        }
 }
 
 auto sv_from_match(const auto& boost_rmatch_result)

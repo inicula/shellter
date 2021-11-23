@@ -133,9 +133,9 @@ int BasicCommand::process(const std::string_view line_sv)
                     O_WRONLY | O_CREAT | O_APPEND,
                     O_WRONLY | O_CREAT | O_APPEND,
                     O_WRONLY | O_CREAT | O_APPEND,
-                    O_WRONLY | O_CREAT,
-                    O_WRONLY | O_CREAT,
-                    O_WRONLY | O_CREAT,
+                    O_WRONLY | O_CREAT | O_TRUNC,
+                    O_WRONLY | O_CREAT | O_TRUNC,
+                    O_WRONLY | O_CREAT | O_TRUNC,
                     O_RDONLY,
                     O_RDONLY
                 };
@@ -205,6 +205,12 @@ int BasicCommand::process(const std::string_view line_sv)
 
                 restore_standard_fds(old_fds);
                 return EXIT_FAILURE;
+        }
+
+        if(args_after_redir.empty())
+        {
+                restore_standard_fds(old_fds);
+                return EXIT_SUCCESS;
         }
 
         /* check for builtin command */
