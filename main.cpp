@@ -152,6 +152,7 @@ int BasicCommand::process(const std::string_view line_sv)
                 static constexpr std::array<std::string_view, 8> redir_symbols = {
                     "1>>", "2>>", ">>", "1>", "2>", ">", "0<", "<"
                 };
+                static constexpr std::size_t appending_fds_limit = 2;
                 static constexpr std::array<int, 8> symbol_fds = {1, 2, 1, 1, 2, 1, 0, 0};
                 static constexpr int OUTFILE_PERMS = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
                 static constexpr std::array<int, 8> open_modes = {
@@ -203,6 +204,29 @@ int BasicCommand::process(const std::string_view line_sv)
                 /* check if filename was found; if so, redirect that stream */
                 if(filename != nullptr)
                 {
+                        /* check if filename refers to valid standard fd */
+                        const std::string_view filename_sv = filename;
+                        if(filename_sv == "&2" || filename_sv == "&1" || filename_sv == "&0")
+                        {
+                                if(symbol_pos <= appending_fds_limit)
+                                {
+                                        print_err_fmt("shellter: can't redirect standard fd "
+                                                      "to another standard fd in appending mode\n");
+                                        return EXIT_FAILURE;
+                                }
+
+                                const int new_fd = std::atoi(filename_sv.data() + 1);
+                                dup2(new_fd, symbol_fds[symbol_pos]);
+                                continue;
+                        }
+                        else if(filename_sv.find("&") == 0)
+                        {
+                                print_err_fmt("shellter: looked for valid file descriptor, found: {}\n",
+                                              filename_sv);
+                                return EXIT_FAILURE;
+                        }
+
+                        /* filename refers to an actual file */
                         const int new_fd =
                             (symbol_pos < redir_symbols.size() - 2)
                                 ? open(filename, open_modes[symbol_pos], OUTFILE_PERMS)
@@ -407,7 +431,7 @@ std::optional<std::string> readline_to_string(const char* const prompt)
                 return std::nullopt;
         }
 
-        std::string res = buf;
+        const std::string res = buf;
         free(buf);
 
         return res;
@@ -506,9 +530,7 @@ void loop()
                 }
 
                 std::string& line = *opt_line;
-
                 boost::trim(line);
-
                 if(line.empty())
                 {
                         continue;
@@ -570,6 +592,14 @@ void interrupt_child(const int)
 
 int main()
 {
+        /* misc inits */
+        rl_outstream = stderr;
+        if(!isatty(0) || !isatty(2))
+        {
+                FILE* devnull = std::fopen("/dev/null", "w");
+                rl_outstream = devnull;
+        }
+
         signal(SIGINT, &interrupt_child);
 
         set_user_and_host();
