@@ -573,7 +573,14 @@ int main()
         signal(SIGINT, &interrupt_child);
 
         set_user_and_host();
-        home = std::string("/home/") + current_user.data();
+        if(geteuid() != 0)
+        {
+                home = std::string("/home/") + current_user.data();
+        }
+        else
+        {
+                home = std::string("/") + current_user.data();
+        }
 
         loop();
         readline_free_history();
