@@ -38,6 +38,7 @@ static std::unordered_map<std::string, std::string> environment_vars;
 #include "builtins.h"
 
 /* class declarations */
+struct StdioFds;
 struct SyntaxErrorRegex;
 class BasicCommand;
 class LogicSequence;
@@ -63,6 +64,30 @@ static void loop();
 static void interrupt_child(const int);
 
 /* class definitions */
+struct StdioFds
+{
+public:
+        StdioFds()
+        {
+                for(int i = 0; i < 3; ++i)
+                {
+                        old[i] = dup(i);
+                }
+        }
+
+        ~StdioFds()
+        {
+                for(int i = 0; i < 3; ++i)
+                {
+                        dup2(old[i], i);
+                        close(old[i]);
+                }
+        }
+
+private:
+        std::array<int, 3> old;
+};
+
 struct SyntaxErrorRegex
 {
         SyntaxErrorRegex(const char* fmt_str, const char* reg_str)
@@ -121,7 +146,7 @@ int BasicCommand::process(const std::string_view line_sv)
         std::vector<std::string> args_after_redir;
 
         /* check for redirection */
-        const std::array<int, 3> old_fds = {dup(0), dup(1), dup(2)};
+        StdioFds old_fds{};
         for(std::size_t i = 0; i < args.size(); ++i)
         {
                 static constexpr std::array<std::string_view, 8> redir_symbols = {
@@ -188,7 +213,6 @@ int BasicCommand::process(const std::string_view line_sv)
                                 print_err_fmt("shellter: error opening {}: {}\n", filename,
                                               strerror(errno));
 
-                                restore_standard_fds(old_fds);
                                 return EXIT_FAILURE;
                         }
 
@@ -203,13 +227,11 @@ int BasicCommand::process(const std::string_view line_sv)
                     "shellter: error in redirection symbol '{}': filename is missing\n",
                     symbol_found);
 
-                restore_standard_fds(old_fds);
                 return EXIT_FAILURE;
         }
 
         if(args_after_redir.empty())
         {
-                restore_standard_fds(old_fds);
                 return EXIT_SUCCESS;
         }
 
@@ -219,7 +241,6 @@ int BasicCommand::process(const std::string_view line_sv)
         {
                 const auto r = builtin_it->second(args_after_redir);
 
-                restore_standard_fds(old_fds);
                 return r;
         }
 
@@ -239,8 +260,6 @@ int BasicCommand::process(const std::string_view line_sv)
                               strerror(errno));
                 exit(1);
         }
-
-        restore_standard_fds(old_fds);
 
         int status;
         do
