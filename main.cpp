@@ -103,6 +103,7 @@ struct SyntaxErrorRegex
 class BasicCommand
 {
 public:
+        static std::optional<std::vector<std::string>> handle_redirections(const std::vector<std::string>&);
         static int process(const std::string_view);
 };
 
@@ -119,53 +120,28 @@ public:
 };
 
 /* static member function definitions */
-int BasicCommand::process(const std::string_view line_sv)
+std::optional<std::vector<std::string>> BasicCommand::handle_redirections(const std::vector<std::string>& args)
 {
-        std::string str(line_sv);
-        boost::trim(str);
-
-        /* split words, compress spaces */
-        std::vector<std::string> args;
-        boost::split(args, std::as_const(str), boost::is_any_of(" "), boost::token_compress_on);
-
-        /* replace environment values */
-        for(std::size_t i = 0; i < args.size(); ++i)
-        {
-                if(i == 1 && args[0] == std::string_view("addenv"))
-                {
-                        continue;
-                }
-
-                const auto it = environment_vars.find(args[i]);
-                if(it != environment_vars.end())
-                {
-                        args[i] = it->second;
-                }
-        }
+        static constexpr std::array<std::string_view, 8> redir_symbols = {
+            "1>>", "2>>", ">>", "1>", "2>", ">", "0<", "<"
+        };
+        static constexpr std::size_t appending_fds_limit = 2;
+        static constexpr std::array<int, 8> symbol_fds = {1, 2, 1, 1, 2, 1, 0, 0};
+        static constexpr int OUTFILE_PERMS = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+        static constexpr std::array<int, 8> open_modes = {
+            O_WRONLY | O_CREAT | O_APPEND,
+            O_WRONLY | O_CREAT | O_APPEND,
+            O_WRONLY | O_CREAT | O_APPEND,
+            O_WRONLY | O_CREAT | O_TRUNC,
+            O_WRONLY | O_CREAT | O_TRUNC,
+            O_WRONLY | O_CREAT | O_TRUNC,
+            O_RDONLY,
+            O_RDONLY
+        };
 
         std::vector<std::string> args_after_redir;
-
-        /* check for redirection */
-        StdioFds old_fds{};
         for(std::size_t i = 0; i < args.size(); ++i)
         {
-                static constexpr std::array<std::string_view, 8> redir_symbols = {
-                    "1>>", "2>>", ">>", "1>", "2>", ">", "0<", "<"
-                };
-                static constexpr std::size_t appending_fds_limit = 2;
-                static constexpr std::array<int, 8> symbol_fds = {1, 2, 1, 1, 2, 1, 0, 0};
-                static constexpr int OUTFILE_PERMS = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-                static constexpr std::array<int, 8> open_modes = {
-                    O_WRONLY | O_CREAT | O_APPEND,
-                    O_WRONLY | O_CREAT | O_APPEND,
-                    O_WRONLY | O_CREAT | O_APPEND,
-                    O_WRONLY | O_CREAT | O_TRUNC,
-                    O_WRONLY | O_CREAT | O_TRUNC,
-                    O_WRONLY | O_CREAT | O_TRUNC,
-                    O_RDONLY,
-                    O_RDONLY
-                };
-
                 const std::string_view current_arg = args[i];
 
                 /* check if at least one symbol was found */
@@ -178,7 +154,7 @@ int BasicCommand::process(const std::string_view line_sv)
                 /* none were found */
                 if(it == redir_symbols.end())
                 {
-                        args_after_redir.emplace_back(std::move(args[i]));
+                        args_after_redir.push_back(args[i]);
                         continue;
                 }
 
@@ -212,7 +188,7 @@ int BasicCommand::process(const std::string_view line_sv)
                                 {
                                         print_err_fmt("shellter: can't redirect standard fd "
                                                       "to another standard fd in appending mode\n");
-                                        return EXIT_FAILURE;
+                                        return std::nullopt;
                                 }
 
                                 const int new_fd = std::atoi(filename_sv.data() + 1);
@@ -223,7 +199,7 @@ int BasicCommand::process(const std::string_view line_sv)
                         {
                                 print_err_fmt("shellter: looked for valid file descriptor, found: {}\n",
                                               filename_sv);
-                                return EXIT_FAILURE;
+                                return std::nullopt;
                         }
 
                         /* filename refers to an actual file */
@@ -237,7 +213,7 @@ int BasicCommand::process(const std::string_view line_sv)
                                 print_err_fmt("shellter: error opening {}: {}\n", filename,
                                               strerror(errno));
 
-                                return EXIT_FAILURE;
+                                return std::nullopt;
                         }
 
                         dup2(new_fd, symbol_fds[symbol_pos]);
@@ -251,9 +227,46 @@ int BasicCommand::process(const std::string_view line_sv)
                     "shellter: error in redirection symbol '{}': filename is missing\n",
                     symbol_found);
 
+                return std::nullopt;
+        }
+
+        return std::optional{std::move(args_after_redir)};
+}
+
+int BasicCommand::process(const std::string_view line_sv)
+{
+        std::string str(line_sv);
+        boost::trim(str);
+
+        /* split words, compress spaces */
+        std::vector<std::string> args;
+        boost::split(args, std::as_const(str), boost::is_any_of(" "), boost::token_compress_on);
+
+        /* replace environment values */
+        for(std::size_t i = 0; i < args.size(); ++i)
+        {
+                if(i == 1 && args[0] == std::string_view("addenv"))
+                {
+                        continue;
+                }
+
+                const auto it = environment_vars.find(args[i]);
+                if(it != environment_vars.end())
+                {
+                        args[i] = it->second;
+                }
+        }
+
+        /* check for redirection */
+        StdioFds old_fds{};
+        auto args_after_redir_opt = handle_redirections(args);
+
+        if(!args_after_redir_opt.has_value())
+        {
                 return EXIT_FAILURE;
         }
 
+        auto& args_after_redir = *args_after_redir_opt;
         if(args_after_redir.empty())
         {
                 return EXIT_SUCCESS;
