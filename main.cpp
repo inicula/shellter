@@ -245,7 +245,8 @@ int BasicCommand::process(const std::string_view line_sv)
         /* replace environment values */
         for(std::size_t i = 0; i < args.size(); ++i)
         {
-                if(i == 1 && args[0] == std::string_view("addenv"))
+                if(i == 1 && (args[0] == std::string_view("addenv") ||
+                              args[0] == std::string_view("eaddenv")))
                 {
                         continue;
                 }

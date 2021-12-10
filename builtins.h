@@ -128,6 +128,25 @@ int addenv(const args_t& args)
         return EXIT_SUCCESS;
 }
 
+int eaddenv(const args_t& args)
+{
+        const std::size_t len = args.size();
+        if(len != 3 || args[1].front() != '$')
+        {
+                print_err_fmt("shellter: eaddenv usage: eaddenv $VARNAME VALUE\n");
+                return EXIT_FAILURE;
+        }
+
+        if(!setenv(args[1].data() + 1, args[2].data(), 1))
+        {
+                return EXIT_FAILURE;
+        }
+
+        environment_vars[args[1]] = args[2];
+
+        return EXIT_SUCCESS;
+}
+
 int quit(const args_t& args)
 {
         const std::size_t len = args.size();
@@ -153,5 +172,6 @@ static const std::unordered_map<std::string_view, builtin_func_t> builtin_funcs 
     { "pwd",     &builtins::pwd     },
     { "history", &builtins::history },
     { "addenv",  &builtins::addenv  },
+    { "eaddenv", &builtins::eaddenv  },
     { "quit",    &builtins::quit    }
 };
