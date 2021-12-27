@@ -1,13 +1,12 @@
-template<typename... T>
-void print_err_fmt(T&&... args)
+void print_err_fmt(auto&& str, auto&&... args)
 {
         if(isatty(2))
         {
-                fmt::print(stderr, STDERR_COLOR std::forward<T>(args)...);
+                fmt::print(stderr, STDERR_COLOR str, std::forward<decltype(args)>(args)...);
         }
         else
         {
-                fmt::print(stderr, std::forward<T>(args)...);
+                fmt::print(stderr, fmt::runtime(str), std::forward<decltype(args)>(args)...);
         }
 }
 
