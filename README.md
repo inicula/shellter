@@ -3,7 +3,7 @@ Minimal Unix shell written in C++.
 
 #### Dependencies:
 + libboost-regex-dev;
-+ libfmt-dev;
++ libfmt8-dev;
 + libreadline-dev;
 + c++20-compatible compiler (at least `gcc version 10.1` or `clang version 11.0.0`).
 
