@@ -13,10 +13,12 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <termios.h>
-#include <fmt/core.h>
-#include <fmt/color.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/regex.hpp>
+
+#define FMT_HEADER_ONLY
+#include "third-party/fmt-8.1.0/include/fmt/core.h"
+#include "third-party/fmt-8.1.0/include/fmt/color.h"
 
 namespace fs = std::filesystem;
 
