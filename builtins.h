@@ -172,6 +172,6 @@ static const std::unordered_map<std::string_view, builtin_func_t> builtin_funcs 
     { "pwd",     &builtins::pwd     },
     { "history", &builtins::history },
     { "addenv",  &builtins::addenv  },
-    { "eaddenv", &builtins::eaddenv  },
+    { "eaddenv", &builtins::eaddenv },
     { "quit",    &builtins::quit    }
 };
