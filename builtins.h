@@ -137,7 +137,7 @@ int eaddenv(const args_t& args)
                 return EXIT_FAILURE;
         }
 
-        if(!setenv(args[1].data() + 1, args[2].data(), 1))
+        if(setenv(args[1].data() + 1, args[2].data(), 1) < 0)
         {
                 return EXIT_FAILURE;
         }
